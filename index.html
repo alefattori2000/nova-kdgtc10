@@ -210,8 +210,14 @@ function mapCard(p){const ad=addrOf(p),hd=fold("map","Mappa",ad?"Google Maps":"m
 /* voce */
 const speakable=t=>String(t||"").replace(/\*\*/g,"").replace(/^\s*[-•*]\s+/gm,"").replace(/https?:\/\/\S+/g," ").replace(/\n+/g,". ").replace(/\s+/g," ").trim();
 const itVoices=()=>{try{return speechSynthesis.getVoices().filter(v=>/^it/i.test(v.lang))}catch(e){return[]}};
-function pickVoice(){const L=itVoices();if(!L.length)return null;let vv="";try{vv=localStorage.getItem("vv")||""}catch(e){}const f=L.find(v=>v.name===vv);if(f)return f;const sc=v=>(/premium|enhanced|neural|natural|wavenet/i.test(v.name)?4:0)+(/luca|cosimo|diego|paolo/i.test(v.name)?2:0)+(v.localService?0:1);return[...L].sort((x,y)=>sc(y)-sc(x))[0]}
-function mkU(x){const u=new SpeechSynthesisUtterance(x.trim()),v=pickVoice();u.lang="it-IT";if(v)u.voice=v;u.rate=VRATE;u.pitch=0.92;u.onboundary=()=>{CS.e=1;if(CS.paths)spawnP(1,null,4)};return u}
+const VF=/elsa|isabella|alice|federica|paola|fiamma|fabiola|irma|palmira|pierina|imelda|valentina|emma|giorgia|carla|chiara|silvia|bianca|google|female|donna|samantha/i,VM=/luca|cosimo|diego|giuseppe|benigno|calimero|cataldo|gianni|lisandro|rinaldo|alessandro|marcello|paolo|giorgio|roberto|matteo|federico|male|uomo/i;
+const vGen=()=>{try{return localStorage.getItem("vg")||"m"}catch(e){return"m"}};
+const vQual=v=>/premium|enhanced|avanzat|neural|natural|online|wavenet/i.test(v.name);
+const vIsM=v=>VM.test(v.name)&&!/female/i.test(v.name),vIsF=v=>VF.test(v.name)&&!vIsM(v);
+try{if(localStorage.getItem("vmig")!=="1"){localStorage.removeItem("vv");localStorage.setItem("vmig","1")}}catch(e){}
+function pickVoice(){const L=itVoices();if(!L.length)return null;let vv="";try{vv=localStorage.getItem("vv")||""}catch(e){}const f=L.find(v=>v.name===vv);if(f)return f;const m=vGen()==="m";const sc=v=>((m?vIsM(v):vIsF(v))?6:0)+(vQual(v)?4:0)+(/cosimo/i.test(v.name)?-2:0)+(v.localService?0:1);return[...L].sort((x,y)=>sc(y)-sc(x))[0]}
+function voiceHint(){const L=itVoices(),v=pickVoice();if(!L.length)return"Questo browser non ha voci italiane.";const m=vGen()==="m",ok=v&&(m?vIsM(v):vIsF(v))&&vQual(v);if(ok)return"Voce in uso: "+v.name+" (naturale).";const ios=/iphone|ipad/i.test(navigator.userAgent);return"Voce in uso: "+(v?v.name:"predefinita")+". "+(ios?"Per una voce maschile naturale: Impostazioni iPhone → Accessibilità → Contenuti letti → Voci → Italiano → Luca → scarica la versione «Avanzata», poi riapri Nova.":"Per una voce "+(m?"maschile ":"")+"naturale apri Nova con Microsoft Edge: Chrome sul PC ha solo voci robotiche.")}
+function mkU(x){const u=new SpeechSynthesisUtterance(x.trim()),v=pickVoice();u.lang="it-IT";if(v)u.voice=v;u.rate=VRATE;u.pitch=1;u.onboundary=()=>{CS.e=1;if(CS.paths)spawnP(1,null,4)};return u}
 function say(t,retry){if(!("speechSynthesis" in window)){toast("Voce non supportata da questo browser");return false}const s=speakable(t);if(!s)return false;try{if(LST){try{LST.stop()}catch(e){}}speechSynthesis.cancel();const parts=s.match(/[^.!?;]+[.!?;]?/g)||[s],ch=[];let c="";parts.forEach(x=>{if((c+x).length>180&&c){ch.push(c);c=x}else c+=x});if(c)ch.push(c);let st=false;entSub(ch[0]);ch.forEach((x,i)=>{const u=mkU(x);u.onstart=()=>{st=true;entSub(x)};if(i===ch.length-1)u.onend=()=>{if(CONV.on&&!CONV.busy)convListen()};speechSynthesis.speak(u)});if(!retry)setTimeout(()=>{if(!st&&!speechSynthesis.speaking)say(t,true)},1800);return true}catch(e){return false}}
 const hush=()=>{try{speechSynthesis.cancel()}catch(e){}};
 async function wl(){try{if(VOICE&&navigator.wakeLock&&!WL){WL=await navigator.wakeLock.request("screen");WL.addEventListener("release",()=>{WL=null})}else if(!VOICE&&WL){await WL.release();WL=null}}catch(e){}}
@@ -343,7 +349,7 @@ const TOOLS=[
 {name:"agenda",description:"Prossimi appuntamenti e attività aperte di tutti i partner (max 15), in ordine di data.",execute:()=>{const now=nowL(),out=[];P.forEach(p=>{(p.mt||[]).forEach(m=>{if(m.data&&(m.fine||m.data)>=now)out.push({quando:m.data,tipo:"appuntamento",titolo:m.titolo,partner:p.ragione,partner_id:p.id,incontro_id:m.id})});(p.tk||[]).forEach(k=>{if(!k.done)out.push({quando:k.due||"9999",tipo:"attività",titolo:k.testo,partner:p.ragione,partner_id:p.id,attivita_id:k.id})})});return out.sort((a,b)=>a.quando<b.quando?-1:1).slice(0,15).map(x=>x.quando==="9999"?{...x,quando:"senza scadenza"}:x)}},
 {name:"ricorda",description:"Salva nella memoria personale dell'utente un fatto duraturo: preferenza, abitudine, regola di lavoro, informazione su una persona o un cliente. Chiamalo quando l'utente dice «ricorda», «tieni a mente», «di solito», «preferisco», oppure condivide un'informazione che ti servirà in futuro. Una frase breve e autosufficiente.",inputSchema:SC({fatto:SS("frase breve e completa, in terza persona o imperativo")},["fatto"]),execute:i=>{const t=String(i.fatto||"").trim().slice(0,240);if(!t)throw new Error("manca il fatto");const L=memLoad();if(L.some(x=>nz(x.t)===nz(t)))return{ok:true,nota:"già in memoria"};L.push({t,at:Date.now()});memSave(L.slice(-80));return{ok:true,salvato:t}}},
 {name:"dimentica",description:"Toglie dalla memoria personale i ricordi che contengono il testo indicato, quando l'utente chiede di dimenticare qualcosa.",inputSchema:SC({testo:SS("parola o frase da cercare nei ricordi")},["testo"]),execute:i=>{const q=nz(String(i.testo||""));if(!q)throw new Error("manca il testo");const L=memLoad(),K=L.filter(x=>!nz(x.t).includes(q));memSave(K);return{ok:true,rimossi:L.length-K.length}}},
-{name:"mostra_citta",description:"Mostra sullo schermo di Nova l'olografia di una città (il suo monumento simbolo) insieme al meteo. Usalo quando l'utente chiede di vedere una città, il meteo o «dove sono». Senza città usa quella dove si trova.",inputSchema:SC({citta:SS("nome della città, facoltativo")}),execute:i=>{if(!ENT.open)entOpen();setTimeout(()=>holoShow(String(i.citta||(WX.here&&WX.here.label)||wxCity()),12000),400);return{ok:true,citta:String(i.citta||wxCity())}}},
+{name:"mostra_citta",description:"Mostra sullo schermo di Nova l'olografia di una città (il suo monumento simbolo) insieme al meteo. Usalo quando l'utente chiede di vedere una città, il meteo o «dove sono». Senza città usa quella dove si trova.",inputSchema:SC({citta:SS("nome della città, facoltativo")}),execute:i=>{if(!ENT.open)entOpen();setTimeout(()=>holoShow(String(i.citta||(WX.here&&WX.here.label)||wxCity()),14000),400);return{ok:true,citta:String(i.citta||wxCity())}}},
 {name:"nuovo_appuntamento",description:"Crea un appuntamento futuro nella scheda del partner. Giorno in formato YYYY-MM-DD, ore HH:MM. Segnala se si sovrappone ad altri.",inputSchema:SC({partner_id:PID,titolo:SS("es. Visita commerciale"),giorno:SS("YYYY-MM-DD"),ora_inizio:SS("HH:MM"),ora_fine:SS("HH:MM, facoltativa"),tipo:SS("Sede Cliente, Telepresence Microsoft Teams, Telefonata o Altro")},["partner_id","giorno","ora_inizio"]),execute:i=>{const p=gp(i.partner_id),dn=String(i.giorno||""),s=String(i.ora_inizio||""),e=String(i.ora_fine||"");if(!/^\d{4}-\d{2}-\d{2}$/.test(dn)||!/^\d{2}:\d{2}$/.test(s))throw new Error("servono giorno YYYY-MM-DD e ora_inizio HH:MM");if(e&&e<=s)throw new Error("ora_fine deve essere dopo ora_inizio");const k=String(i.tipo||"Sede Cliente"),clash=P.flatMap(x=>(x.mt||[]).map(m=>({x,m}))).find(({m})=>m.data&&m.data.slice(0,10)===dn&&m.fine&&s<m.fine.slice(11,16)&&(e||s)>m.data.slice(11,16));p.mt=p.mt||[];const m={id:gid(),titolo:String(i.titolo||"Appuntamento"),data:dn+"T"+s,fine:e?dn+"T"+e:"",tipo:k,luogo:k==="Sede Cliente"?addrOf(p):"",testo:"",report:"",tono:"formale"};p.mt.push(m);persist(p);return{ok:true,incontro_id:m.id,sovrapposizione:clash?clash.m.titolo+" ("+clash.x.ragione+")":null}}},
 {name:"nuova_attivita",description:"Aggiunge un'attività (da fare o già svolta) alla scheda del partner.",inputSchema:SC({partner_id:PID,testo:SS("cosa fare"),scadenza:SS("YYYY-MM-DD, facoltativa"),gia_svolta:{type:"boolean",description:"true se già fatta"}},["partner_id","testo"]),execute:i=>{const p=gp(i.partner_id),dn=!!i.gia_svolta,d=String(i.scadenza||"");p.tk=p.tk||[];const k={id:gid(),testo:String(i.testo||"").trim(),due:d,done:dn,doneAt:dn?(d?d+"T12:00":nowL()):""};if(!k.testo)throw new Error("manca il testo");p.tk.push(k);persist(p);return{ok:true,attivita_id:k.id}}},
 {name:"completa_attivita",description:"Segna come svolta un'attività aperta del partner, individuata da una parte del testo.",inputSchema:SC({partner_id:PID,testo:SS("parte del testo dell'attività")},["partner_id","testo"]),execute:i=>{const p=gp(i.partner_id),q=nz(i.testo),m=(p.tk||[]).filter(k=>!k.done&&nz(k.testo).includes(q));if(m.length!==1)throw new Error(m.length?"più attività corrispondono: "+m.map(k=>k.testo).join(" | "):"nessuna attività aperta corrisponde");m[0].done=true;m[0].doneAt=nowL();persist(p);return{ok:true,completata:m[0].testo}}},
@@ -397,7 +403,7 @@ La conversazione è GIÀ in corso e hai già salutato: non salutare, non riprese
  catch(e){full="";CONV.hist.push({u:text,a:"(errore di collegamento)"});clog();enq("Non riesco a collegarmi all’intelligenza artificiale in questo momento.")}
  if(TUSED){TUSED=false;render();clog()}
  CONV.done=true;fin()}
-function voicePanel(){return`<details id="nset" class="card" ${OPEN.nset?"open":""}><summary style="cursor:pointer;font-weight:600">⚙︎ Impostazioni di ${esc(NM)}</summary><div class="row" style="margin-top:8px"><button data-a="entopen">🖥️ Schermo ${esc(NM)}</button><button data-a="dg">🔧 Diagnosi voce</button><button data-a="mutog">${musicOn()?"🎸 Musica: sì":"🎸 Musica: no"}</button><button data-a="entwake">${LIVE?"👂 Ascolto: sì":"👂 Ascolto: no"}</button><button data-a="vstop">⏹ Stop</button></div><div id="cstat" class="mu"></div><div id="clog"></div><label>Il tuo nome (come ti chiama l’assistente)</label><input id="un" value="${esc(UN)}"><label>Nome dell’assistente</label><input id="nm" value="${esc(NM)}"><label>Grafica</label><select id="sty"><option value="orb" ${STY==="orb"?"selected":""}>Entità (anello di particelle)</option><option value="circ" ${STY==="circ"?"selected":""}>Circuito</option></select><label>Città per il meteo (se la posizione non è disponibile)</label><input id="wxcity" value="${esc(wxCity())}"><label>Stile musica</label><select id="mst">${MSTY.map((x,i)=>`<option value="${i}" ${i===MST?"selected":""}>${x.n}</option>`).join("")}</select><label>Voce</label><select id="vv">${itVoices().map(v=>`<option value="${esc(v.name)}" ${pickVoice()&&pickVoice().name===v.name?"selected":""}>${esc(v.name)}</option>`).join("")||`<option>Voce predefinita del dispositivo</option>`}</select><label>Velocità voce</label><select id="vr">${[0.8,0.9,1,1.1,1.25,1.5].map(v=>`<option value="${v}" ${v===VRATE?"selected":""}>${v}x</option>`).join("")}</select><div class="mu">Versione dell’app: 02/11 15:10</div><div class="mu">Di’ «${esc(NM)}» seguito da un comando: «briefing», «quando parto», «prossimo appuntamento», «cerca …», «aggiungi un appuntamento…», «stop».</div></details>`}
+function voicePanel(){return`<details id="nset" class="card" ${OPEN.nset?"open":""}><summary style="cursor:pointer;font-weight:600">⚙︎ Impostazioni di ${esc(NM)}</summary><div class="row" style="margin-top:8px"><button data-a="entopen">🖥️ Schermo ${esc(NM)}</button><button data-a="dg">🔧 Diagnosi voce</button><button data-a="mutog">${musicOn()?"🎸 Musica: sì":"🎸 Musica: no"}</button><button data-a="entwake">${LIVE?"👂 Ascolto: sì":"👂 Ascolto: no"}</button><button data-a="vstop">⏹ Stop</button></div><div id="cstat" class="mu"></div><div id="clog"></div><label>Il tuo nome (come ti chiama l’assistente)</label><input id="un" value="${esc(UN)}"><label>Nome dell’assistente</label><input id="nm" value="${esc(NM)}"><label>Grafica</label><select id="sty"><option value="orb" ${STY==="orb"?"selected":""}>Entità (anello di particelle)</option><option value="circ" ${STY==="circ"?"selected":""}>Circuito</option></select><label>Città per il meteo (se la posizione non è disponibile)</label><input id="wxcity" value="${esc(wxCity())}"><label>Stile musica</label><select id="mst">${MSTY.map((x,i)=>`<option value="${i}" ${i===MST?"selected":""}>${x.n}</option>`).join("")}</select><label>Tipo di voce</label><select id="vg"><option value="m" ${vGen()==="m"?"selected":""}>Uomo</option><option value="f" ${vGen()==="f"?"selected":""}>Donna</option></select><div class="mu" id="vhint" style="margin:4px 0 6px">${esc(voiceHint())}</div><label>Voce</label><select id="vv">${itVoices().map(v=>`<option value="${esc(v.name)}" ${pickVoice()&&pickVoice().name===v.name?"selected":""}>${esc(v.name)}</option>`).join("")||`<option>Voce predefinita del dispositivo</option>`}</select><label>Velocità voce</label><select id="vr">${[0.8,0.9,1,1.1,1.25,1.5].map(v=>`<option value="${v}" ${v===VRATE?"selected":""}>${v}x</option>`).join("")}</select><div class="mu">Versione dell’app: 02/11 16:30</div><div class="mu">Di’ «${esc(NM)}» seguito da un comando: «briefing», «quando parto», «prossimo appuntamento», «cerca …», «aggiungi un appuntamento…», «stop».</div></details>`}
 try{speechSynthesis.onvoiceschanged=()=>{if(VOICE&&!CONV.on&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName||""))render()}}catch(e){}
 setInterval(()=>{if(!VOICE)return;const n=nxCur();if(!n||ANN[n.m.id])return;const mins=(new Date(n.m.data)-Date.now())/6e4;if(mins>0&&mins<=90){ANN[n.m.id]=1;say(nextSpeech()+" Ti serve un riassunto sul cliente? Tocca Briefing.")}},60000);
 
@@ -649,52 +655,257 @@ function entCards(){const e=$("#ent-ap");if(!e)return;const D=dayItems(),n=nxCur
  if(!D.L.length){e.innerHTML=`<div class="ent-c" style="--d:0s">Nessun appuntamento in agenda.</div>`}
  else e.innerHTML=`<div class="ent-h">${esc(D.lab)}</div>`+D.L.map((x,i)=>{const st=new Date(x.m.data),loc=[x.p.loc,x.p.citta].filter(Boolean).join(", "),isN=n&&n.m.id===x.m.id,w=isN&&t&&t.hr?` ${wxIcon(t.hr.c)} ${tdeg(t.hr.t)}`:"";return`<div class="ent-c${x.past?" past":""}${x.live?" live":""}${isN?" nx":""}" style="--d:${(i*.35).toFixed(2)}s"><b>${HM(st)}</b><span>${esc(x.p.ragione)}${w}<small>${esc(x.m.titolo||"")}${remoteT(x.m)?" · da remoto":(loc?" · "+esc(loc):"")}</small></span></div>`}).join("")+`<button class="ent-x" data-a="entapx">Nascondi</button>`;
  clearTimeout(ENT.apT);ENT.apT=setTimeout(()=>{const k=$("#ent-ap");if(k)k.innerHTML=""},45000)}
-/* ===== ologramma della città ===== */
-const HD=320;
-function hpts(def){const P=[];let SH=0;const pu=(x,y)=>P.push([x+SH*y,y]);
- const L=(x1,y1,x2,y2)=>{const n=Math.max(2,Math.round(Math.hypot(x2-x1,y2-y1)*HD));for(let i=0;i<=n;i++)pu(x1+(x2-x1)*i/n,y1+(y2-y1)*i/n)};
- const A=(cx,cy,rx,ry,a0,a1)=>{const n=Math.max(4,Math.round(Math.abs(a1-a0)*Math.max(rx,ry)*HD));for(let i=0;i<=n;i++){const a=a0+(a1-a0)*i/n;pu(cx+Math.cos(a)*rx,cy+Math.sin(a)*ry)}};
- const R=(x,y,w,h)=>{L(x,y,x+w,y);L(x+w,y,x+w,y+h);L(x+w,y+h,x,y+h);L(x,y+h,x,y)};
- const AR=(cx,y,w,h)=>{L(cx-w/2,y,cx-w/2,y+h-w/2);L(cx+w/2,y,cx+w/2,y+h-w/2);A(cx,y+h-w/2,w/2,w/2,0,Math.PI)};
- def({L,A,R,AR,sh:v=>{SH=v}});return P}
-const HLM={
-pisa:{n:"Torre di Pisa",d:h=>{h.sh(0);h.L(-.75,0,.85,0);const ys=[.04,.14,.27,.40,.53,.66,.78,.88];h.sh(.12);for(let i=0;i<7;i++){const y0=ys[i],y1=ys[i+1];h.L(-.11,y0,-.11,y1);h.L(.11,y0,.11,y1);h.L(-.11,y1,.11,y1);if(i>0)for(let k=1;k<7;k++)h.L(-.11+.22*k/7,y0+.01,-.11+.22*k/7,y1-.01)}h.L(-.11,.04,.11,.04);h.R(-.08,.88,.16,.1);h.A(0,.98,.08,.05,0,Math.PI);h.sh(0);h.R(.3,.0,.5,.22);for(let k=0;k<9;k++)h.AR(.34+.055*k,0,.035,.12);h.L(.3,.22,.55,.3);h.L(.55,.3,.8,.22);h.A(.55,.3,.09,.07,0,Math.PI)}},
-duomo:{n:"Cupola del Brunelleschi",d:h=>{h.L(-.8,0,.8,0);h.R(-.8,0,.7,.16);for(let k=0;k<8;k++)h.AR(-.76+.085*k,0,.05,.1);h.R(-.3,.16,.6,.22);for(let k=0;k<5;k++)h.A(-.22+.11*k,.28,.025,.04,0,6.3);h.A(0,.38,.3,.45,0,Math.PI);for(const f of [.75,.5,.25])h.A(0,.38,.3*f,.45,0,Math.PI);h.L(0,.38,0,.83);h.R(-.035,.83,.07,.1);h.L(0,.93,0,1.06);h.A(0,1.07,.012,.012,0,6.3);h.R(.5,0,.12,.78);for(let y=.1;y<.78;y+=.13)h.L(.5,y,.62,y);for(let y=.2;y<.7;y+=.26){h.AR(.54,y,.025,.1);h.AR(.58,y,.025,.1)}}},
-empoli:{n:"Collegiata di Sant’Andrea",d:h=>{h.L(-.8,0,.8,0);h.R(-.4,0,.8,.46);h.L(-.4,.46,0,.84);h.L(0,.84,.4,.46);for(const y of [.1,.2,.31])h.L(-.4,y,.4,y);h.L(-.2,0,-.2,.46);h.L(.2,0,.2,.46);h.AR(0,0,.17,.27);h.AR(-.3,0,.1,.2);h.AR(.3,0,.1,.2);for(let k=-2;k<=2;k++)h.AR(.11*k,.5,.07,.13);h.A(0,.7,.05,.05,0,6.3);h.L(-.3,.46,0,.82);h.L(0,.82,.3,.46)}},
-colosseo:{n:"Colosseo",d:h=>{h.A(0,.35,.8,.18,0,6.3);h.A(0,.17,.8,.18,Math.PI,6.2832);h.L(-.8,.17,-.8,.35);h.L(.8,.17,.8,.35);h.A(0,.33,.5,.1,0,6.3);for(let t=0;t<3;t++)for(let i=0;i<20;i++){const a=Math.PI+Math.PI*(i+.5)/20,x=Math.cos(a)*.8,y=.17+t*.055+Math.sin(a)*.18;h.AR(x,y,.045,.045)}}},
-milano:{n:"Duomo di Milano",d:h=>{h.L(-.8,0,.8,0);h.R(-.6,0,1.2,.46);h.L(-.6,.46,0,.76);h.L(0,.76,.6,.46);for(const x of [-.4,-.2,.2,.4])h.L(x,0,x,.46);for(const x of [-.5,-.3,-.1,.1,.3,.5]){h.AR(x,.04,.07,.2);h.AR(x,.28,.05,.12)}for(const x of [-.6,-.4,-.2,.2,.4,.6]){h.L(x-.02,.46,x,.66);h.L(x,.66,x+.02,.46)}h.R(-.1,.55,.2,.12);h.L(-.1,.67,0,1.0);h.L(0,1.0,.1,.67);h.L(0,1.0,0,1.1)}},
-mole:{n:"Mole Antonelliana",d:h=>{h.L(-.7,0,.7,0);h.R(-.32,0,.64,.22);for(let k=0;k<9;k++)h.L(-.28+.07*k,.22,-.28+.07*k,.4);h.L(-.32,.22,.32,.22);h.L(-.32,.4,.32,.4);h.A(0,.4,.26,.2,0,Math.PI);h.L(-.26,.4,-.16,.62);h.L(.26,.4,.16,.62);h.R(-.16,.62,.32,.06);for(let k=0;k<6;k++)h.L(-.12+.048*k,.68,-.12+.048*k,.8);h.L(-.14,.8,.14,.8);h.L(-.14,.8,0,.9);h.L(.14,.8,0,.9);h.L(0,.9,0,1.22)}},
-venezia:{n:"Campanile di San Marco",d:h=>{h.L(-.8,0,.8,0);h.R(-.09,0,.18,.7);for(let y=.08;y<.7;y+=.08)h.L(-.09,y,.09,y);h.R(-.11,.7,.22,.12);h.AR(-.04,.71,.05,.1);h.AR(.04,.71,.05,.1);h.R(-.11,.82,.22,.04);h.L(-.11,.86,0,1.0);h.L(0,1.0,.11,.86);h.L(0,1.0,0,1.1);h.A(.5,.2,.14,.16,0,Math.PI);h.A(.8-.12,.2,.1,.12,0,Math.PI);h.R(.36,0,.5,.2);for(let k=0;k<5;k++)h.AR(.4+.1*k,0,.06,.14);h.R(-.8,0,.5,.22);for(let k=0;k<7;k++)h.AR(-.76+.07*k,0,.04,.14)}},
-bologna:{n:"Le Due Torri",d:h=>{h.L(-.8,0,.8,0);h.R(-.3,0,.14,.9);for(let y=.06;y<.88;y+=.09)h.L(-.3,y,-.16,y);for(let k=0;k<4;k++)h.R(-.3+.036*k,.9,.02,.04);h.L(-.34,.9,-.12,.9);h.sh(.07);h.R(.05,0,.17,.56);for(let y=.07;y<.55;y+=.08)h.L(.05,y,.22,y);for(let k=0;k<3;k++)h.R(.05+.06*k,.56,.035,.04);h.sh(0);h.R(.4,0,.35,.14);h.A(.575,.14,.1,.1,0,Math.PI)}},
-vesuvio:{n:"Vesuvio",d:h=>{h.L(-.8,.0,-.45,.22);h.L(-.45,.22,-.28,.5);h.L(-.28,.5,-.1,.44);h.L(-.1,.44,0,.36);h.L(0,.36,.12,.56);h.L(.12,.56,.3,.28);h.L(.3,.28,.8,.0);for(let k=1;k<=3;k++){const y=-.03*k;for(let i=0;i<60;i++){const x1=-.8+1.6*i/60,x2=-.8+1.6*(i+1)/60;if(i%2===0)h.L(x1,y+.012*Math.sin(i),x2,y+.012*Math.sin(i+1))}}h.A(.12,.62,.05,.06,0,6.3);h.A(.2,.74,.07,.07,0,6.3);h.A(.3,.88,.1,.08,0,6.3)}},
-mangia:{n:"Torre del Mangia",d:h=>{h.L(-.8,0,.8,0);h.R(-.07,0,.14,.8);for(let y=.05;y<.8;y+=.055)h.L(-.07,y,.07,y);h.L(-.13,.8,.13,.8);for(let k=0;k<7;k++)h.AR(-.11+.037*k,.8,.03,.07);h.R(-.1,.87,.2,.12);h.AR(0,.88,.07,.1);h.L(-.1,.99,0,1.04);h.L(0,1.04,.1,.99);h.L(0,1.04,0,1.12);h.R(-.8,0,.62,.3);for(let k=0;k<8;k++)h.AR(-.76+.07*k,0,.04,.17);for(let k=0;k<9;k++)h.R(-.8+.07*k,.3,.035,.035)}},
-lanterna:{n:"La Lanterna",d:h=>{h.L(-.8,0,.8,0);h.R(-.2,0,.4,.44);h.L(-.2,.44,.2,.44);h.R(-.14,.44,.28,.3);h.L(-.18,.74,.18,.74);h.R(-.07,.74,.14,.14);h.A(0,.88,.07,.07,0,Math.PI);h.L(0,.95,0,1.04);h.AR(0,0,.08,.14)}},
-sky:{n:"Skyline",d:h=>{h.L(-.8,0,.8,0);const B=[[-.78,.2],[-.62,.34],[-.48,.24],[-.36,.5],[-.2,.3],[-.08,.7],[.06,.42],[.2,.62],[.34,.28],[.46,.4],[.6,.22]];B.forEach(([x,y],i)=>{h.R(x,0,.1,y);for(let k=1;k*.07<y-.04;k++)h.L(x+.02,k*.07,x+.08,k*.07)});h.L(-.08,.7,-.03,.84);h.L(-.03,.84,.02,.7)}}
+/* ===== ologramma 3D della città ===== */
+const HD3=210;
+function g3(fn){const P=[];let SH=0,OX=0,OZ=0;const pu=(x,y,z)=>P.push([x+OX+SH*y,y,z+OZ]);
+ const L=(a,b)=>{const n=Math.max(2,Math.round(Math.hypot(b[0]-a[0],b[1]-a[1],b[2]-a[2])*HD3));for(let i=0;i<=n;i++){const t=i/n;pu(a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t)}};
+ const ring=(cx,y,cz,rx,rz,a0=0,a1=6.2832)=>{const n=Math.max(8,Math.round(Math.abs(a1-a0)*Math.max(rx,rz)*HD3));for(let i=0;i<=n;i++){const a=a0+(a1-a0)*i/n;pu(cx+Math.cos(a)*rx,y,cz+Math.sin(a)*rz)}};
+ const poly=(cx,y,cz,r,k,rot=0)=>{for(let i=0;i<k;i++){const a=rot+i/k*6.2832,b=rot+(i+1)/k*6.2832;L([cx+Math.cos(a)*r,y,cz+Math.sin(a)*r],[cx+Math.cos(b)*r,y,cz+Math.sin(b)*r])}};
+ const prism=(cx,cz,r,k,y0,y1,fl=0,rot=0)=>{poly(cx,y0,cz,r,k,rot);poly(cx,y1,cz,r,k,rot);for(let i=0;i<k;i++){const a=rot+i/k*6.2832;L([cx+Math.cos(a)*r,y0,cz+Math.sin(a)*r],[cx+Math.cos(a)*r,y1,cz+Math.sin(a)*r])}for(let j=1;j<=fl;j++)poly(cx,y0+(y1-y0)*j/(fl+1),cz,r,k,rot)};
+ const box=(cx,cz,w,d,y0,y1,fl=0)=>{const c=[[-w,-d],[w,-d],[w,d],[-w,d]].map(q=>[cx+q[0],cz+q[1]]);const rect=y=>{for(let i=0;i<4;i++){const a=c[i],b=c[(i+1)%4];L([a[0],y,a[1]],[b[0],y,b[1]])}};rect(y0);rect(y1);c.forEach(q=>L([q[0],y0,q[1]],[q[0],y1,q[1]]));for(let j=1;j<=fl;j++)rect(y0+(y1-y0)*j/(fl+1))};
+ const cyl=(cx,cz,r,y0,y1,rings=2,verts=12,r1)=>{r1=r1??r;for(let j=0;j<rings;j++){const t=rings>1?j/(rings-1):0,rr=r+(r1-r)*t;ring(cx,y0+(y1-y0)*t,cz,rr,rr)}for(let i=0;i<verts;i++){const a=i/verts*6.2832;L([cx+Math.cos(a)*r,y0,cz+Math.sin(a)*r],[cx+Math.cos(a)*r1,y1,cz+Math.sin(a)*r1])}};
+ const rev=(cx,cz,pr,mer=12,par)=>{for(let i=0;i<mer;i++){const a=i/mer*6.2832,ca=Math.cos(a),sa=Math.sin(a);for(let k=0;k<pr.length-1;k++)L([cx+ca*pr[k][0],pr[k][1],cz+sa*pr[k][0]],[cx+ca*pr[k+1][0],pr[k+1][1],cz+sa*pr[k+1][0]])}(par||pr.map((_,k)=>k)).forEach(k=>{const p=pr[k];if(p&&p[0]>.005)ring(cx,p[1],cz,p[0],p[0])})};
+ const dome=(cx,cz,r,y0,h,mer=12,pt)=>{const pr=[];for(let k=0;k<=6;k++){const a=k/6*Math.PI/2;pr.push([r*Math.cos(a),y0+h*(pt?Math.pow(Math.sin(a),.8):Math.sin(a))])}rev(cx,cz,pr,mer,[0,2,4])};
+ const arch=(c,u,y,w,h)=>{const r=w/2,P2=(a,v)=>[c[0]+u[0]*a,v,c[2]+u[2]*a];L(P2(-r,y),P2(-r,y+h-r));L(P2(r,y),P2(r,y+h-r));const n=Math.max(6,Math.round(Math.PI*r*HD3));for(let i=0;i<=n;i++){const a=Math.PI*i/n;pu(...P2(Math.cos(a)*r,y+h-r+Math.sin(a)*r))}};
+ const cv=(c,u,y,r)=>{const n=Math.max(10,Math.round(6.2832*r*HD3));for(let i=0;i<=n;i++){const a=6.2832*i/n;pu(c[0]+u[0]*Math.cos(a)*r,y+Math.sin(a)*r,c[2]+u[2]*Math.cos(a)*r)}};
+ const spire=(cx,cz,r,y0,h,k=4)=>{const rot=k===4?Math.PI/4:0;for(let i=0;i<k;i++){const a=i/k*6.2832+rot;L([cx+Math.cos(a)*r,y0,cz+Math.sin(a)*r],[cx,y0+h,cz])}poly(cx,y0,cz,r,k,rot)};
+ const merl=(cx,cz,w,d,y)=>{[[[-w,-d],[w,-d]],[[w,-d],[w,d]],[[w,d],[-w,d]],[[-w,d],[-w,-d]]].forEach(([a,b])=>{const n=Math.max(2,Math.round(Math.hypot(b[0]-a[0],b[1]-a[1])*22));for(let i=0;i<=n;i+=2){const t=i/n,x=cx+a[0]+(b[0]-a[0])*t,z=cz+a[1]+(b[1]-a[1])*t;L([x,y,z],[x,y+.03,z])}})};
+ const merlC=(cx,cz,r,y)=>{const n=Math.round(6.2832*r*22);for(let i=0;i<n;i+=2){const a=i/n*6.2832;L([cx+Math.cos(a)*r,y,cz+Math.sin(a)*r],[cx+Math.cos(a)*r,y+.03,cz+Math.sin(a)*r])}};
+ fn({pu,L,ring,poly,prism,box,cyl,rev,dome,arch,cv,spire,merl,merlC,sh:v=>{SH=v},off:(x,z)=>{OX=x;OZ=z}});return P}
+const X1=[1,0,0],Z1=[0,0,1];
+const A3={
+tower:(h,p)=>{const w=p.w??.07,H=p.h??.8,t=p.top||"merl";h.sh(p.lean||0);h.box(0,0,w*1.3,w*1.3,0,.035);h.box(0,0,w,w,0,H,p.fl??5);
+ if(t==="merl"){h.box(0,0,w*1.15,w*1.15,H,H+.03);h.merl(0,0,w*1.15,w*1.15,H+.03)}
+ else if(t==="dome"){h.box(0,0,w,w,H,H+.08);h.dome(0,0,w*.9,H+.08,w);h.L([0,H+.08+w,0],[0,H+.15+w,0])}
+ else{const bh=.1;h.box(0,0,w,w,H,H+bh);[[0,-w,X1],[0,w,X1],[-w,0,Z1],[w,0,Z1]].forEach(([x,z,u])=>h.arch([x,0,z],u,H+.012,w*.9,bh*.82));
+  if(t==="bell"){h.box(0,0,w*1.1,w*1.1,H+bh,H+bh+.012);h.spire(0,0,w*1.3,H+bh+.012,.07)}
+  else if(t==="spire")h.spire(0,0,w*1.35,H+bh,p.sp??.3);
+  else if(t==="cusp"){h.prism(0,0,w*.95,8,H+bh,H+bh+.08);h.spire(0,0,w*.95,H+bh+.08,p.sp??.22,8)}
+  else if(t==="clock"){h.box(0,0,w*1.1,w*1.1,H+bh,H+bh+.03);h.merl(0,0,w*1.1,w*1.1,H+bh+.03);h.cv([0,0,-w-.004],X1,H-.08,w*.62)}
+  else if(t==="lantern"){h.cyl(0,0,w*.7,H+bh,H+bh+.08,2,8);h.dome(0,0,w*.7,H+bh+.08,w*.6,8)}}
+ h.sh(0)},
+rtower:(h,p)=>{const r=p.r??.09,H=p.h??.75,n=p.lv??6;h.sh(p.lean||0);h.cyl(0,0,r,0,H,n+1,18);
+ if(p.loggia)for(let j=1;j<n;j++){const y0=H*j/n,y1=H*(j+1)/n;for(let i=0;i<24;i++){const a=i/24*6.2832;h.L([Math.cos(a)*r*1.1,y0,Math.sin(a)*r*1.1],[Math.cos(a)*r*1.1,y1-.01,Math.sin(a)*r*1.1])}h.ring(0,y0,0,r*1.1,r*1.1)}
+ const t=p.top||"merl";if(t==="merl"){h.ring(0,H,0,r*1.08,r*1.08);h.merlC(0,0,r*1.08,H)}
+ else if(t==="bell"){h.cyl(0,0,r*.72,H,H+.1,2,12);h.ring(0,H+.1,0,r*.75,r*.75)}
+ else if(t==="cone"){h.spire(0,0,r,H,p.sp??.18,12)}
+ h.sh(0)},
+light:(h,p)=>{const H=p.h??.72;if(p.sq){h.box(0,0,.1,.1,0,H*.55,3);h.box(0,0,.12,.12,H*.55,H*.57);h.merl(0,0,.12,.12,H*.57);h.box(0,0,.075,.075,H*.57,H*.92,2);h.box(0,0,.09,.09,H*.92,H*.94)}
+ else{h.cyl(0,0,.11,0,H*.88,5,14,.065);h.ring(0,H*.88,0,.1,.1);h.ring(0,H*.9,0,.1,.1)}
+ h.cyl(0,0,.055,H*.94,H*1.06,3,10);h.dome(0,0,.06,H*1.06,.05,8);h.L([0,H*1.1,0],[0,H*1.18,0]);if(p.stat){h.L([0,H*1.18,0],[0,H*1.32,0]);h.L([-.04,H*1.27,0],[.04,H*1.27,0])}},
+dome:(h,p)=>{const r=p.r??.2,dy=p.dy??.3,dh=p.dh??.26,nl=p.nl??.42;h.box(0,0,.11,nl,0,.2,1);h.box(0,0,nl*.8,.11,0,.2,1);
+ h.L([-.11,.2,-nl],[0,.27,-nl]);h.L([0,.27,-nl],[.11,.2,-nl]);h.L([0,.27,-nl],[0,.27,nl]);h.cv([0,0,-nl-.002],X1,.15,.035);
+ h.prism(0,0,r,8,.2,dy,1,Math.PI/8);if(p.oct!==0)h.dome(0,0,r,dy,dh,8,1);else h.dome(0,0,r,dy,dh,14);
+ h.cyl(0,0,r*.16,dy+dh,dy+dh+.07,2,8);h.spire(0,0,r*.16,dy+dh+.07,.06,8);
+ if(p.camp){h.off(.3,-.32);A3.tower(h,{w:.05,h:p.camp,top:"spire",sp:.08,fl:6});h.off(0,0)}
+ if(p.tw2){[-1,1].forEach(sx=>{h.off(sx*.16,-nl+.05);A3.tower(h,{w:.04,h:.42,top:"cusp",sp:.08,fl:3})});h.off(0,0)}
+ if(p.multi){[[-.2,.18],[.2,.18],[0,.32]].forEach(([x,z])=>{h.prism(x,z,.09,8,.2,.26,0);h.dome(x,z,.09,.26,.11,8,1)})}},
+facade:(h,p)=>{const w=p.w??.3,d=p.d??.42,H=p.h??.36,g=p.g??.14;h.box(0,0,w,d,0,H,p.fl??1);
+ [-d,d].forEach(z=>{h.L([-w,H,z],[0,H+g,z]);h.L([0,H+g,z],[w,H,z])});h.L([0,H+g,-d],[0,H+g,d]);
+ const np=p.np??3;for(let i=0;i<np;i++){const x=np===1?0:-w*.62+w*1.24*i/(np-1),ww=i===(np-1)/2?w*.36:w*.24;h.arch([x,0,-d-.002],X1,0,ww,(i===(np-1)/2?.2:.15))}
+ h.cv([0,0,-d-.002],X1,H*.75,w*.22);h.cv([0,0,-d-.002],X1,H*.75,w*.12);
+ if(p.bar)for(let i=0;i<6;i++){const x=-w+w*2*i/5;h.L([x,0,-d-.01],[x,H,-d-.01])}
+ if(p.str)for(let j=1;j<=p.str;j++)h.L([-w,H*j/(p.str+1),-d-.004],[w,H*j/(p.str+1),-d-.004]);
+ if(p.camp){h.off(w+.07,d*.4);A3.tower(h,{w:.055,h:p.camp,top:p.ct||"bell",fl:5});h.off(0,0)}
+ if(p.tw2){[-1,1].forEach(sx=>{h.off(sx*(w-.05),-d+.05);A3.tower(h,{w:.05,h:p.tw2,top:"cusp",sp:.1,fl:4})});h.off(0,0)}
+ if(p.dm){h.prism(0,d*.4,.13,8,H+g*.5,H+g+.05,0);h.dome(0,d*.4,.13,H+g+.05,.15,8,1)}},
+goth:(h,p)=>{const w=.42,d=.52,H=.28;h.box(0,0,w,d,0,H,1);[-d,d].forEach(z=>{h.L([-w,H,z],[0,H+.12,z]);h.L([0,H+.12,z],[w,H,z])});
+ for(let i=0;i<=8;i++){const x=-w+w*2*i/8;[-d,d].forEach(z=>{h.L([x,H,z],[x,H+.09,z]);h.L([x-.01,H+.09,z],[x,H+.12,z]);h.L([x,H+.12,z],[x+.01,H+.09,z])})}
+ for(let i=0;i<=8;i++){const z=-d+d*2*i/8;[-w,w].forEach(x=>{h.L([x,H,z],[x,H+.08,z])})}
+ for(let i=0;i<5;i++)h.arch([-w*.7+w*1.4*i/4,0,-d-.003],X1,0,.09,.2);
+ h.prism(0,0,.07,8,H+.1,H+.3,1);h.spire(0,0,.07,H+.3,.32,8);h.L([0,H+.62,0],[0,H+.7,0])},
+mole:(h,p)=>{h.box(0,0,.27,.27,0,.24,2);for(let i=0;i<=8;i++){const x=-.27+.54*i/8;[[x,-.27],[x,.27],[-.27,x],[.27,x]].forEach(([a,b])=>h.L([a,.24,b],[a,.36,b]))}h.box(0,0,.27,.27,.36,.38);
+ for(let j=0;j<=5;j++){const t=j/5,r=.25-.15*t;h.box(0,0,r,r,.38+.3*t,.38+.3*t)}[[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([a,b])=>h.L([.25*a,.38,.25*b],[.1*a,.68,.1*b]));
+ h.box(0,0,.08,.08,.68,.8,1);h.box(0,0,.05,.05,.8,.86);h.spire(0,0,.05,.86,.42);h.ring(0,1.0,0,.015,.015)},
+castle:(h,p)=>{const w=p.w??.42,d=p.d??.34,H=p.h??.2,tr=p.tr??.065;
+ if(p.oct){h.prism(0,0,.4,8,0,.26,1,Math.PI/8);h.prism(0,0,.26,8,0,.26,0,Math.PI/8);for(let i=0;i<8;i++){const a=Math.PI/8+i/8*6.2832;h.prism(Math.cos(a)*.4,Math.sin(a)*.4,.06,8,0,.3,1,Math.PI/8)}h.arch([0,0,-.37],X1,0,.08,.13);return}
+ h.box(0,0,w,d,0,H,p.fl??0);h.merl(0,0,w,d,H);
+ [[w,d],[w,-d],[-w,d],[-w,-d]].forEach(([x,z])=>{if(p.sq){h.box(x,z,tr,tr,0,H+.1,1);h.merl(x,z,tr,tr,H+.1)}else{h.cyl(x,z,tr,0,H+.1,3,10);h.merlC(x,z,tr,H+.1)}});
+ h.arch([0,0,-d-.002],X1,0,.09,.13);if(p.moat)h.ring(0,0,0,w+.18,d+.18);
+ if(p.keep){h.box(-w*.3,d*.1,.075,.075,0,p.keep,3);h.merl(-w*.3,d*.1,.075,.075,p.keep)}
+ if(p.star){for(let i=0;i<6;i++){const a=i/6*6.2832,b=(i+.5)/6*6.2832;h.L([Math.cos(a)*.75,0,Math.sin(a)*.75],[Math.cos(b)*.55,0,Math.sin(b)*.55]);h.L([Math.cos(b)*.55,0,Math.sin(b)*.55],[Math.cos(a+6.2832/6)*.75,0,Math.sin(a+6.2832/6)*.75])}}},
+arena:(h,p)=>{const rx=p.rx??.8,rz=p.rz??.58,lv=p.lv??3,lh=p.lh??.11,half=p.half,a0=half?Math.PI:0,a1=half?6.2832:6.2832;
+ for(let j=0;j<=lv;j++)h.ring(0,j*lh,0,rx,rz,a0,a1);h.ring(0,0,0,rx*.55,rz*.5,a0,a1);h.ring(0,lh*.6,0,rx*.75,rz*.72,a0,a1);
+ const n=p.n??36;for(let j=0;j<lv;j++)for(let i=0;i<n;i++){const a=a0+(a1-a0)*(i+.5)/n;if(p.ruin&&j===lv-1&&Math.sin(a)>.2)continue;const c=[Math.cos(a)*rx,0,Math.sin(a)*rz],tx=-Math.sin(a)*rx,tz=Math.cos(a)*rz,tl=Math.hypot(tx,tz);h.arch(c,[tx/tl,0,tz/tl],j*lh+.008,(a1-a0)*Math.hypot(rx,rz)/1.41/n*.6,lh*.85)}
+ if(half)h.L([-rx,0,0],[rx,0,0]),h.L([-rx,lv*lh,0],[rx,lv*lh,0])},
+theatre:(h,p)=>{for(let j=0;j<9;j++){const r=.25+j*.065;h.ring(0,j*.03,0,r,r,Math.PI,6.2832)}for(let i=0;i<=8;i++){const a=Math.PI+Math.PI*i/8;h.L([Math.cos(a)*.25,0,Math.sin(a)*.25],[Math.cos(a)*.77,.24,Math.sin(a)*.77])}h.ring(0,0,0,.2,.2,Math.PI,6.2832)},
+temple:(h,p)=>{const w=p.w??.24,d=p.d??.6,H=.34;h.box(0,0,w+.05,d+.05,0,.02);h.box(0,0,w+.03,d+.03,.02,.04);
+ const cols=[];for(let i=0;i<6;i++){const x=-w+w*2*i/5;cols.push([x,-d],[x,d])}for(let i=1;i<12;i++){const z=-d+d*2*i/12;cols.push([-w,z],[w,z])}
+ cols.forEach(([x,z],k)=>{if(p.ruin&&(k%3===1))return;h.cyl(x,z,.022,.04,H,2,6)});if(p.ruin)return;
+ h.box(0,0,w+.02,d+.02,H,H+.06);[-d-.02,d+.02].forEach(z=>{h.L([-w-.02,H+.06,z],[0,H+.16,z]);h.L([0,H+.16,z],[w+.02,H+.06,z])});h.L([0,H+.16,-d-.02],[0,H+.16,d+.02])},
+gate:(h,p)=>{const w=p.w??.36,d=.09,H=p.h??.44;h.box(0,0,w,d,0,H,1);h.box(0,0,w*1.04,d*1.1,H,H+.08);[-d-.002,d+.002].forEach(z=>{h.arch([0,0,z],X1,0,w*.62,H*.72);if(p.side){h.arch([-w*.72,0,z],X1,0,w*.2,H*.4);h.arch([w*.72,0,z],X1,0,w*.2,H*.4)}});
+ for(let i=0;i<4;i++){const x=-w*.9+w*1.8*i/3;h.L([x,0,-d-.01],[x,H,-d-.01])}if(p.tw){[-1,1].forEach(sx=>{h.box(sx*(w+.07),0,.07,.07,0,H+.16,2);h.merl(sx*(w+.07),0,.07,.07,H+.16)})}},
+palace:(h,p)=>{const w=p.w??.6,d=p.d??.22,H=p.h??.3,fl=p.fl??2;h.box(0,0,w,d,0,H,fl);
+ for(let i=0;i<=14;i++){const x=-w+w*2*i/14;h.L([x,H*.08,-d-.003],[x,H*.92,-d-.003])}
+ if(p.lg){const n=p.lg;for(let i=0;i<n;i++)h.arch([-w*.9+w*1.8*(i+.5)/n,0,-d-.004],X1,0,w*1.6/n*.8,H*.45)}
+ if(p.ped){h.L([-w*.25,H,-d],[0,H+.1,-d]);h.L([0,H+.1,-d],[w*.25,H,-d])}
+ if(p.pron){h.box(0,-d-.12,w*.35,.12,0,.02);for(let i=0;i<6;i++)h.cyl(-w*.3+w*.6*i/5,-d-.22,.018,.02,H*.8,2,6);h.L([-w*.35,H*.8,-d-.24],[0,H*.8+.1,-d-.24]);h.L([0,H*.8+.1,-d-.24],[w*.35,H*.8,-d-.24])}
+ if(p.dm){h.cyl(0,.0,.16,H,H+.08,2,12);h.dome(0,0,.16,H+.08,.17,12);h.cyl(0,0,.03,H+.25,H+.3,2,6)}
+ if(p.tw){h.off(p.twx??w*.6,0);A3.tower(h,{w:.05,h:p.tw,top:"merl",fl:4});h.off(0,0)}
+ if(p.wings)[-1,1].forEach(sx=>h.box(sx*(w-.08),d+.25,.08,.25,0,H,fl))},
+mountain:(h,p)=>{const pk=p.pk||[[0,0,.6,.8,1]];const Hf=(x,z)=>{let y=0;pk.forEach(([px,pz,ph,pr,e])=>{const d=Math.hypot(x-px,z-pz);y=Math.max(y,ph*Math.pow(Math.max(0,1-d/pr),e))});if(p.crater){const d=Math.hypot(x,z);if(d<.1)y-=(.1-d)*1.2}return y};
+ const N=p.g??15,R=.85;for(let j=0;j<=N;j++){const v=-R+2*R*j/N;let px=null;for(let i=0;i<=60;i++){const u=-R+2*R*i/60;if(Math.hypot(u,v)>R){px=null;continue}const a=[u,Hf(u,v),v];if(px)h.L(px,a);px=a}px=null;for(let i=0;i<=60;i++){const u=-R+2*R*i/60;if(Math.hypot(u,v)>R){px=null;continue}const a=[v,Hf(v,u),u];if(px)h.L(px,a);px=a}}
+ if(p.fall){for(let i=0;i<7;i++){const x=-.08+i*.027;h.L([x,Hf(x,-.25),-.3],[x+.01,0,-.48])}}
+ if(p.chap){const y=Hf(0,0);h.box(0,0,.05,.07,y,y+.07);h.L([-.05,y+.07,-.07],[0,y+.11,-.07]);h.L([0,y+.11,-.07],[.05,y+.07,-.07]);h.L([0,y+.11,-.07],[0,y+.11,.07]);h.L([-.05,y+.07,.07],[0,y+.11,.07]);h.L([0,y+.11,.07],[.05,y+.07,.07])}},
+bridge:(h,p)=>{const t=p.t||"arch",y=t==="roman"?.2:.32,Lh=.8;[-.06,.06].forEach(z=>h.L([-Lh,y,z],[Lh,y,z]));for(let i=0;i<=10;i++){const x=-Lh+2*Lh*i/10;h.L([x,y,-.06],[x,y,.06])}
+ if(t==="arch"){[-.05,.05].forEach(z=>{const n=60;let pv=null;for(let i=0;i<=n;i++){const a=Math.PI*i/n,pt=[Math.cos(a)*.6,y-.3+Math.sin(a)*.28,z];if(pv)h.L(pv,pt);pv=pt}});for(let i=1;i<12;i++){const x=-.55+1.1*i/12,ay=y-.3+Math.sqrt(Math.max(0,1-(x/.6)**2))*.28;[-.05,.05].forEach(z=>h.L([x,ay,z],[x,y,z]))}[-.75,.75].forEach(x=>h.L([x,0,0],[x,y,0]))}
+ else if(t==="stay"){h.L([.1,0,0],[-.05,.75,0]);for(let i=0;i<10;i++){const x=-.7+.07*i;h.L([-.05,.75,0],[x,y,.06]);h.L([-.05,.75,0],[x+.85+.0,y,-.06])}}
+ else if(t==="swing"){[-.45,.45].forEach(x=>{h.box(x,0,.05,.09,0,y+.12,2)});h.box(-.7,0,.1,.12,0,y,1);h.box(.7,0,.1,.12,0,y,1)}
+ else if(t==="roman"){for(let i=0;i<5;i++){const cx=-.64+.32*i;[-.06,.06].forEach(z=>h.arch([cx,0,z],X1,0,.24,.18))}}
+ h.L([-Lh,0,0],[Lh,0,0])},
+sphere:(h,p)=>{const r=.42,cy=.46;for(let j=1;j<8;j++){const a=-Math.PI/2+Math.PI*j/8;h.ring(0,cy+Math.sin(a)*r,0,Math.cos(a)*r,Math.cos(a)*r)}for(let i=0;i<12;i++){const a=i/12*6.2832,n=50;let pv=null;for(let k=0;k<=n;k++){const b=-Math.PI/2+Math.PI*k/n,pt=[Math.cos(a)*Math.cos(b)*r,cy+Math.sin(b)*r,Math.sin(a)*Math.cos(b)*r];if(pv)h.L(pv,pt);pv=pt}}
+ for(let k=0;k<5;k++){const a=k*1.3;h.L([Math.cos(a)*r*1.01,cy+.15,Math.sin(a)*r*1.01],[Math.cos(a+.25)*r*1.01,cy-.12,Math.sin(a+.25)*r*1.01])}h.ring(0,0,0,.6,.6)},
+fountain:(h,p)=>{if(p.long){h.box(0,0,.5,.16,0,.22,1);for(let i=0;i<6;i++)h.arch([-.42+.168*i,0,-.162],X1,0,.12,.17);return}
+ if(p.box){h.box(0,0,.28,.2,0,.26,2);[[.28,.2],[.28,-.2],[-.28,.2],[-.28,-.2]].forEach(([x,z])=>{h.cyl(x,z,.04,0,.34,3,8);h.spire(x,z,.04,.34,.06,8)});h.cyl(0,0,.05,.26,.38,2,8);h.dome(0,0,.06,.38,.08,8);h.ring(0,0,0,.45,.36);return}
+ h.prism(0,0,.62,25,0,.13,1);h.prism(0,0,.62*.62,12,.16,.27,0);h.rev(0,0,[[0,.13],[.05,.16],[.05,.3],[.2,.36],[.2,.39],[.04,.4],[.04,.52],[.12,.55],[.12,.57]],10);[0,1,2].forEach(i=>{const a=i/3*6.2832;h.L([Math.cos(a)*.04,.57,Math.sin(a)*.04],[Math.cos(a)*.03,.68,Math.sin(a)*.03])})},
+octa:(h,p)=>{if(p.t==="parma"){h.prism(0,0,.23,8,0,.75,5,Math.PI/8);for(let i=0;i<8;i++){const a=Math.PI/8+i/8*6.2832;h.cyl(Math.cos(a)*.23,Math.sin(a)*.23,.018,.75,.83,2,4);h.spire(Math.cos(a)*.23,Math.sin(a)*.23,.02,.83,.05,4)}h.spire(0,0,.23,.75,.08,8);return}
+ h.prism(0,0,.42,8,0,.24,1,Math.PI/8);h.prism(0,0,.26,8,.24,.46,1,Math.PI/8);h.spire(0,0,.27,.46,.1,8);h.box(0,-.5,.14,.09,0,.18);h.cyl(.3,-.42,.05,0,.38,3,8);h.cyl(-.3,-.42,.05,0,.38,3,8)},
+sky:(h,p)=>{let rs=11;const rn=()=>{rs=(rs*16807)%2147483647;return rs/2147483647};for(let i=0;i<14;i++){const x=-.6+rn()*1.2,z=-.4+rn()*.8,w=.05+rn()*.06,H=.15+rn()*(p.low?.15:.55);h.box(x,z,w,w,0,H,Math.floor(H*12))}},
+sassi:(h,p)=>{let rs=5;const rn=()=>{rs=(rs*16807)%2147483647;return rs/2147483647};for(let i=0;i<38;i++){const x=-.65+rn()*1.3,z=-.4+rn()*.8,y=(z+.4)*.45+rn()*.05,w=.04+rn()*.04;h.box(x,z,w,w*.8,y,y+.06+rn()*.04)}h.off(.1,.32);A3.tower(h,{w:.04,h:.55,top:"spire",sp:.1,fl:3});h.off(0,0)}
 };
-const HCITIES=[["firenze","Firenze",43.77,11.25,"duomo"],["pisa","Pisa",43.72,10.40,"pisa"],["empoli","Empoli",43.72,10.95,"empoli"],["roma","Roma",41.90,12.50,"colosseo"],["milano","Milano",45.46,9.19,"milano"],["torino","Torino",45.07,7.69,"mole"],["venezia","Venezia",45.44,12.33,"venezia"],["bologna","Bologna",44.49,11.34,"bologna"],["napoli","Napoli",40.85,14.27,"vesuvio"],["siena","Siena",43.32,11.33,"mangia"],["genova","Genova",44.41,8.93,"lanterna"]];
-function holoPick(name){const q=nz(name||"");let c=q&&HCITIES.find(x=>q.includes(x[0]));if(c)return{city:c[1],lm:c[4]};const p=WX.pos;if(p){let b=null,bd=1e9;HCITIES.forEach(x=>{const d=Math.hypot((x[2]-p.lat)*111,(x[3]-p.lon)*80);if(d<bd){bd=d;b=x}});if(b&&bd<40)return{city:b[1],lm:b[4]}}return{city:name||wxCity()||"",lm:"sky"}}
-function holoBuild(lm){let pts=hpts(HLM[lm].d);let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;pts.forEach(q=>{x0=Math.min(x0,q[0]);x1=Math.max(x1,q[0]);y0=Math.min(y0,q[1]);y1=Math.max(y1,q[1])});const w=x1-x0||1,h=y1-y0||1,k=Math.min(1/h,1.55/w),mx=(x0+x1)/2;
- let rs=7;const rnd=()=>{rs=(rs*16807)%2147483647;return rs/2147483647};if(pts.length>2600){const keep=2600/pts.length;pts=pts.filter(()=>rnd()<keep)}
- return pts.map(q=>({x:(q[0]-mx)*k,y:(q[1]-y0)*k,d:rnd()*.9,a:rnd()*6.283,z:rnd()*50,g:rnd()<.12,s:1.7+rnd()*1.6}))}
+function holoParse(spec){return spec.split("+").map(c=>{const[a,q]=c.split("|"),p={};(q||"").split(",").filter(Boolean).forEach(kv=>{const[k,v]=kv.split("=");p[k]=v===undefined?1:isNaN(+v)?v:+v});return{a,p}})}
+function holoBuild(spec){let pts=g3(h=>holoParse(spec).forEach(({a,p})=>{if(a==="mountain"&&typeof p.pk==="number")p.pk=MPK[p.pk];h.off(p.x||0,p.z||0);(A3[a]||A3.sky)(h,p);h.off(0,0)}));
+ let y0=1e9,y1=-1e9,x0=1e9,x1=-1e9,z0=1e9,z1=-1e9;pts.forEach(q=>{x0=Math.min(x0,q[0]);x1=Math.max(x1,q[0]);y0=Math.min(y0,q[1]);y1=Math.max(y1,q[1]);z0=Math.min(z0,q[2]);z1=Math.max(z1,q[2])});
+ const mx=(x0+x1)/2,mz=(z0+z1)/2;let rm=0;pts.forEach(q=>{rm=Math.max(rm,Math.hypot(q[0]-mx,q[2]-mz))});const k=Math.min(1/(y1-y0||1),.6/(rm||1));
+ let rs=7;const rnd=()=>{rs=(rs*16807)%2147483647;return rs/2147483647};const CAP=3400;if(pts.length>CAP){const keep=CAP/pts.length;pts=pts.filter(()=>rnd()<keep)}
+ return pts.map(q=>({x:(q[0]-mx)*k,y:(q[1]-y0)*k,z:(q[2]-mz)*k,d:rnd()*.9,z0:rnd()*50,g:rnd()<.1,s:1.3+rnd()*1.4}))}
+const HCITY=`torino;Torino;45.07;7.69;Mole Antonelliana;mole
+alessandria;Alessandria;44.91;8.61;Cittadella;castle|w=.3,d=.3,h=.12,sq,star
+asti;Asti;44.90;8.21;Torre Troyana;tower|h=.85,top=clock,w=.06
+biella;Biella;45.56;8.05;Santuario di Oropa;facade|w=.36,d=.3,h=.3,np=3,dm
+cuneo;Cuneo;44.39;7.55;Torre Civica;tower|h=.8,top=bell,w=.065
+novara;Novara;45.45;8.62;Cupola di San Gaudenzio;dome|r=.17,dy=.32,dh=.22,oct=0+tower|x=0,h=.98,w=.035,top=spire,sp=.25,fl=0
+verbania;Verbania;45.92;8.55;Villa Taranto;palace|w=.45,h=.28,fl=2,ped
+vercelli;Vercelli;45.32;8.42;Basilica di Sant’Andrea;facade|w=.3,d=.45,h=.34,np=3,tw2=.55
+aosta;Aosta;45.74;7.32;Arco d’Augusto;gate|w=.36,h=.42
+milano;Milano;45.46;9.19;Duomo di Milano;goth
+bergamo;Bergamo;45.70;9.67;Campanone di Città Alta;tower|h=.8,top=lantern,w=.08
+brescia;Brescia;45.54;10.22;Duomo Nuovo;dome|r=.21,dy=.3,dh=.26,oct=0
+como;Como;45.81;9.09;Duomo di Como;dome|r=.16,dy=.3,dh=.22,oct=0,nl=.5
+cremona;Cremona;45.13;10.02;Il Torrazzo;tower|h=.75,top=cusp,w=.075,sp=.3,fl=6
+lecco;Lecco;45.86;9.40;Il Resegone;mountain|pk=0
+lodi;Lodi;45.31;9.50;Tempio dell’Incoronata;octa
+mantova;Mantova;45.16;10.79;Castello di San Giorgio;castle|w=.36,d=.36,h=.22,sq,moat
+monza;Monza;45.58;9.27;Villa Reale;palace|w=.55,h=.26,fl=2,ped,wings
+pavia;Pavia;45.19;9.16;Certosa di Pavia;facade|w=.34,d=.5,h=.36,np=3,bar,dm
+sondrio;Sondrio;46.17;9.87;Alpi Retiche;mountain|pk=1
+varese;Varese;45.82;8.83;Sacro Monte;mountain|pk=2,chap
+venezia;Venezia;45.44;12.33;Campanile di San Marco;tower|h=.72,top=spire,w=.08,sp=.2,fl=0+dome|x=.55,z=.2,r=.12,dy=.18,dh=.12,oct=0,multi
+belluno;Belluno;46.14;12.22;Dolomiti Bellunesi;mountain|pk=3
+padova;Padova;45.41;11.88;Basilica del Santo;dome|r=.12,dy=.26,dh=.13,oct=0,multi,tw2
+rovigo;Rovigo;45.07;11.79;Torri Donà;tower|x=-.08,h=.7,w=.06,top=merl+tower|x=.1,h=.5,w=.055,top=merl
+treviso;Treviso;45.67;12.24;Porta San Tomaso;gate|w=.34,h=.4,tw
+verona;Verona;45.44;10.99;Arena di Verona;arena|lv=2,lh=.12
+vicenza;Vicenza;45.55;11.55;Basilica Palladiana;palace|w=.5,d=.3,h=.32,fl=1,lg=7+tower|x=.62,h=.85,w=.04,top=bell
+trento;Trento;46.07;11.12;Castello del Buonconsiglio;castle|w=.4,d=.25,h=.24,keep=.48
+bolzano;Bolzano;46.50;11.35;Duomo di Bolzano;facade|w=.26,d=.45,h=.3,np=1+tower|x=.32,z=.2,h=.55,w=.055,top=spire,sp=.32
+trieste;Trieste;45.65;13.78;Faro della Vittoria;light|h=.62,stat
+udine;Udine;46.06;13.24;Castello di Udine;castle|w=.45,d=.2,h=.28,sq,fl=2
+gorizia;Gorizia;45.94;13.62;Castello di Gorizia;castle|w=.36,d=.3,h=.24,keep=.4
+pordenone;Pordenone;45.96;12.66;Campanile di San Marco;tower|h=.8,top=spire,w=.06,sp=.22
+genova;Genova;44.41;8.93;La Lanterna;light|sq,h=.8
+imperia;Imperia;43.89;8.03;Basilica di San Maurizio;dome|r=.18,dy=.32,dh=.22,oct=0,tw2
+la spezia;La Spezia;44.10;9.82;Castello San Giorgio;castle|w=.4,d=.24,h=.2,sq
+savona;Savona;44.31;8.48;Torretta Leon Pancaldo;rtower|r=.1,h=.55,lv=4,top=merl
+bologna;Bologna;44.49;11.34;Le Due Torri;tower|x=-.12,h=.95,w=.055,fl=8+tower|x=.13,h=.5,w=.06,lean=.09,fl=4
+ferrara;Ferrara;44.84;11.62;Castello Estense;castle|w=.36,d=.36,h=.24,sq,tr=.08,moat
+forli;Forlì;44.22;12.04;Abbazia di San Mercuriale;tower|h=.85,top=spire,w=.06,sp=.25+facade|x=-.4,w=.18,d=.32,h=.26,np=1
+modena;Modena;44.65;10.93;La Ghirlandina;tower|h=.62,top=cusp,w=.065,sp=.3,fl=5
+parma;Parma;44.80;10.33;Battistero di Parma;octa|t=parma
+piacenza;Piacenza;45.05;9.69;Palazzo Gotico;palace|w=.5,d=.25,h=.32,fl=1,lg=5
+ravenna;Ravenna;44.42;12.20;Basilica di San Vitale;octa
+reggio emilia/reggio nell emilia;Reggio Emilia;44.70;10.63;Basilica della Ghiara;dome|r=.17,dy=.3,dh=.22,oct=0
+rimini;Rimini;44.06;12.57;Arco d’Augusto;gate|w=.38,h=.4
+firenze;Firenze;43.77;11.25;Cupola del Brunelleschi;dome|r=.2,dy=.3,dh=.3,camp=.75
+arezzo;Arezzo;43.46;11.88;Piazza Grande e Logge;palace|w=.55,d=.2,h=.28,fl=1,lg=9
+grosseto;Grosseto;42.76;11.11;Mura Medicee;castle|w=.5,d=.4,h=.12,sq,star
+livorno;Livorno;43.55;10.31;Fortezza Vecchia;castle|w=.36,d=.3,h=.2,keep=.42,moat
+lucca;Lucca;43.84;10.50;Torre Guinigi;tower|h=.8,top=merl,w=.07,fl=6
+massa;Massa;44.04;10.14;Castello Malaspina;castle|w=.36,d=.24,h=.22,keep=.38
+pisa;Pisa;43.72;10.40;Torre di Pisa;rtower|r=.1,h=.75,lv=7,lean=.1,top=bell,loggia
+pistoia;Pistoia;43.93;10.91;Campanile del Duomo;tower|h=.72,top=cusp,w=.065,sp=.2
+prato;Prato;43.88;11.10;Castello dell’Imperatore;castle|w=.36,d=.36,h=.24,sq,tr=.075
+siena;Siena;43.32;11.33;Torre del Mangia;tower|h=.85,top=clock,w=.05,fl=8+palace|x=-.45,w=.3,d=.15,h=.28,fl=2
+empoli;Empoli;43.72;10.95;Collegiata di Sant’Andrea;facade|w=.28,d=.36,h=.38,np=3,str=3,camp=.62
+perugia;Perugia;43.11;12.39;Fontana Maggiore;fountain
+terni;Terni;42.56;12.65;Cascata delle Marmore;mountain|pk=4,fall
+ancona;Ancona;43.62;13.52;Duomo di San Ciriaco;dome|r=.14,dy=.28,dh=.14,nl=.32
+ascoli piceno/ascoli;Ascoli Piceno;42.85;13.58;Piazza del Popolo;palace|w=.55,d=.2,h=.26,fl=1,lg=8+facade|x=.35,z=.5,w=.2,d=.25,h=.3,np=1
+fermo;Fermo;43.16;13.72;Duomo di Fermo;facade|w=.28,d=.42,h=.36,np=1,camp=.6
+macerata;Macerata;43.30;13.45;Sferisterio;arena|half,lv=2,lh=.14,rx=.8,rz=.5
+pesaro;Pesaro;43.91;12.91;Sfera Grande di Pomodoro;sphere
+roma;Roma;41.90;12.50;Colosseo;arena|lv=4,lh=.1,ruin
+frosinone;Frosinone;41.64;13.35;Campanile della Cattedrale;tower|h=.72,top=bell,w=.06
+latina;Latina;41.47;12.90;Torre Civica;tower|h=.85,top=clock,w=.07,fl=2+palace|w=.45,h=.25,fl=1
+rieti;Rieti;42.40;12.86;Cattedrale di Rieti;facade|w=.26,d=.4,h=.32,np=3+tower|x=.38,h=.6,w=.06,top=bell
+viterbo;Viterbo;42.42;12.11;Palazzo dei Papi;palace|w=.45,d=.22,h=.3,fl=1,lg=7
+l aquila/aquila;L’Aquila;42.35;13.40;Basilica di Collemaggio;facade|w=.36,d=.45,h=.36,g=.0,np=3,str=4
+chieti;Chieti;42.35;14.17;Cattedrale di San Giustino;tower|h=.7,top=cusp,w=.07+facade|x=-.35,w=.2,d=.3,h=.25,np=1
+pescara;Pescara;42.46;14.21;Ponte del Mare;bridge|t=stay
+teramo;Teramo;42.66;13.70;Duomo di Teramo;facade|w=.3,d=.42,h=.34,np=1,camp=.65,ct=cusp
+campobasso;Campobasso;41.56;14.66;Castello Monforte;castle|w=.3,d=.24,h=.2,keep=.38
+isernia;Isernia;41.59;14.23;Fontana Fraterna;fountain|long
+napoli;Napoli;40.85;14.27;Vesuvio;mountain|pk=5,crater
+avellino;Avellino;40.91;14.79;Torre dell’Orologio;tower|h=.75,top=clock,w=.06
+benevento;Benevento;41.13;14.78;Arco di Traiano;gate|w=.34,h=.48
+caserta;Caserta;41.07;14.33;Reggia di Caserta;palace|w=.75,d=.3,h=.28,fl=3,ped,wings
+salerno;Salerno;40.68;14.77;Duomo di Salerno;facade|w=.3,d=.42,h=.3,np=3+tower|x=.4,h=.65,w=.06,top=lantern
+bari;Bari;41.12;16.87;Basilica di San Nicola;facade|w=.34,d=.45,h=.36,np=3,tw2=.5
+barletta;Barletta;41.32;16.28;Castello di Barletta;castle|w=.38,d=.38,h=.22,sq,tr=.09
+andria;Andria;41.23;16.29;Castel del Monte;castle|oct
+brindisi;Brindisi;40.64;17.94;Monumento al Marinaio d’Italia;light|sq,h=.85
+foggia;Foggia;41.46;15.55;Cattedrale di Foggia;facade|w=.3,d=.42,h=.34,np=3,bar,camp=.55
+lecce;Lecce;40.35;18.17;Basilica di Santa Croce;facade|w=.32,d=.44,h=.38,np=3,bar,str=1
+taranto;Taranto;40.47;17.24;Ponte Girevole;bridge|t=swing
+potenza;Potenza;40.64;15.80;Torre Guevara;rtower|r=.13,h=.55,lv=3,top=merl
+matera;Matera;40.67;16.60;I Sassi;sassi
+catanzaro;Catanzaro;38.91;16.59;Ponte Bisantis;bridge|t=arch
+cosenza;Cosenza;39.30;16.25;Castello Svevo;castle|w=.42,d=.26,h=.22
+crotone;Crotone;39.08;17.13;Castello di Carlo V;castle|w=.36,d=.3,h=.2,tr=.09
+reggio calabria/reggio di calabria;Reggio Calabria;38.11;15.65;Castello Aragonese;castle|w=.26,d=.2,h=.24,tr=.1
+vibo valentia/vibo;Vibo Valentia;38.68;16.10;Castello Normanno-Svevo;castle|w=.34,d=.26,h=.22
+palermo;Palermo;38.12;13.36;Teatro Massimo;palace|w=.5,d=.4,h=.26,fl=1,pron,dm
+agrigento;Agrigento;37.31;13.58;Tempio della Concordia;temple
+caltanissetta;Caltanissetta;37.49;14.06;Cattedrale di Caltanissetta;facade|w=.3,d=.42,h=.3,np=3,tw2=.48
+catania;Catania;37.50;15.09;Etna;mountain|pk=6,crater
+enna;Enna;37.57;14.28;Castello di Lombardia;castle|w=.48,d=.3,h=.2,sq,keep=.42
+messina;Messina;38.19;15.55;Campanile del Duomo;tower|h=.85,top=spire,w=.07,sp=.18,fl=4
+ragusa;Ragusa;36.93;14.73;Duomo di San Giorgio;facade|w=.3,d=.4,h=.42,g=.06,np=3,bar,dm
+siracusa;Siracusa;37.08;15.29;Teatro Greco;theatre
+trapani;Trapani;38.02;12.51;Torre di Ligny;rtower|r=.15,h=.4,lv=2,top=merl
+cagliari;Cagliari;39.22;9.12;Bastione di Saint Remy;palace|w=.55,d=.25,h=.3,fl=1,lg=5,ped
+sassari;Sassari;40.73;8.56;Fontana di Rosello;fountain|box
+nuoro;Nuoro;40.32;9.33;Monte Ortobene;mountain|pk=7
+oristano;Oristano;39.90;8.59;Torre di Mariano II;tower|h=.6,top=bell,w=.08,fl=3
+olbia;Olbia;40.92;9.50;Basilica di San Simplicio;facade|w=.26,d=.45,h=.3,np=1,str=2`;
+const MPK=[[[-.5,0,.32,.4,1.3],[-.25,0,.42,.35,1.4],[0,0,.5,.32,1.5],[.25,0,.44,.33,1.4],[.5,0,.36,.38,1.3]],[[-.3,.1,.55,.55,1.4],[.25,-.1,.65,.5,1.5],[0,.3,.4,.5,1.2]],[[0,0,.4,.85,1.6]],[[-.35,0,.62,.3,1.1],[0,.1,.82,.28,1.05],[.32,-.05,.7,.3,1.1],[.12,.3,.5,.3,1.2]],[[0,.25,.55,.7,1],[-.45,.2,.4,.5,1]],[[0,0,.62,.85,1.15],[-.35,-.25,.45,.5,1.1]],[[0,0,.55,.95,1.25]],[[0,0,.38,.85,1.8]]];
+const HCITIES=HCITY.split("\n").map(l=>{const f=l.split(";");return{k:f[0].split("/"),n:f[1],lat:+f[2],lon:+f[3],lm:f[4],sp:f[5]}});
+const hnorm=s=>nz(s).replace(/[^a-z]+/g," ").trim();
+function holoPick(name){const q=hnorm(name||"");if(q){const c=HCITIES.find(x=>x.k.some(k=>q===k||(" "+q+" ").includes(" "+k+" ")));if(c)return c}const p=WX.pos;if(p){let b=null,bd=1e9;HCITIES.forEach(x=>{const d=Math.hypot((x.lat-p.lat)*111,(x.lon-p.lon)*80);if(d<bd){bd=d;b=x}});if(b&&bd<35)return b}return{n:name||wxCity()||"",lm:"Panorama",sp:"sky"}}
 const HOLO={on:false};
-function holoShow(name,ms){if(!ENT.open)return;const c=$("#ent-holo");if(!c)return;const pk=holoPick(name);HOLO.on=true;HOLO.t0=performance.now();HOLO.dur=(ms||11000)/1000;HOLO.city=pk.city;HOLO.name=HLM[pk.lm].n;HOLO.P=holoBuild(pk.lm);ENT.wxUntil=Math.max(ENT.wxUntil||0,Date.now()+(ms||11000)+1500);requestAnimationFrame(holoFrame)}
-function holoCity(){if(!ENT.open)return;const n=(WX.here&&WX.here.label)||wxCity();holoShow(n,11000)}
+function holoShow(name,ms){if(!ENT.open)return;const c=$("#ent-holo");if(!c)return;const pk=holoPick(name);HOLO.P=holoBuild(pk.sp);HOLO.on=true;HOLO.t0=performance.now();HOLO.dur=(ms||14000)/1000;HOLO.city=pk.n;HOLO.name=pk.lm;ENT.wxUntil=Math.max(ENT.wxUntil||0,Date.now()+(ms||14000)+1500);requestAnimationFrame(holoFrame)}
+function holoCity(){if(!ENT.open)return;const n=(WX.here&&WX.here.label)||wxCity();holoShow(n,14000)}
 function holoFrame(ts){if(!HOLO.on)return;const c=$("#ent-holo");if(!c){HOLO.on=false;return}const dpr=Math.min(2,window.devicePixelRatio||1),w=c.clientWidth,h=c.clientHeight;if(!w||!h){HOLO.on=false;return}if(c.width!==Math.round(w*dpr)){c.width=Math.round(w*dpr);c.height=Math.round(h*dpr)}
  const g=c.getContext("2d");g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,w,h);const t=(ts-HOLO.t0)/1000,end=HOLO.dur+1.8;if(t>end){HOLO.on=false;return}
- const sc=Math.min(w,h),cx=w/2,cy=h/2,tr=(typeof OS!=="undefined"&&OS.tr)||0,CC=[Math.round(94*(1-tr)+255*tr),Math.round(231*(1-tr)+150*tr),Math.round(255*(1-tr)+40*tr)],bw=sc*.74,bh=sc*.6,base=cy+bh*.4,top=base-bh;
- const gl=t<.6?t/.6:1,fl=.88+.12*Math.sin(t*37)+(Math.sin(t*3.1)>.97?-.3:0),life=t>HOLO.dur?Math.max(0,1-(t-HOLO.dur)/1.4):1;
+ const sc=Math.min(w,h),cx=w/2,cy=h/2,tr=(typeof OS!=="undefined"&&OS.tr)||0,CC=[Math.round(94*(1-tr)+255*tr),Math.round(231*(1-tr)+150*tr),Math.round(255*(1-tr)+40*tr)],GC=`255,${Math.round(210-60*tr)},${Math.round(122-80*tr)}`;
+ const S=sc*.44,ph=.36,cp=Math.cos(ph),sp=Math.sin(ph),base=cy+S*.6,mid=base-.5*S*cp,th=-.6+t*.38,ct=Math.cos(th),st=Math.sin(th);
+ const gl=t<.6?t/.6:1,fl=.9+.1*Math.sin(t*37)+(Math.sin(t*3.1)>.97?-.3:0),life=t>HOLO.dur?Math.max(0,1-(t-HOLO.dur)/1.4):1;
  g.globalCompositeOperation="lighter";
- const cone=g.createLinearGradient(0,base,0,top);cone.addColorStop(0,`rgba(${CC},${.12*life*gl})`);cone.addColorStop(1,`rgba(${CC},0)`);g.fillStyle=cone;g.beginPath();g.moveTo(cx-bw*.36,base);g.lineTo(cx+bw*.36,base);g.lineTo(cx+bw*.5,top);g.lineTo(cx-bw*.5,top);g.closePath();g.fill();
- for(let r=0;r<2;r++){const q=(t*.5+r*.5)%1;g.strokeStyle=`rgba(${CC},${(.5-.4*q)*life*gl})`;g.lineWidth=1.2;g.beginPath();g.ellipse(cx,base+4,bw*(.3+.18*q),bw*.045*(1+q),0,0,6.283);g.stroke()}
- const sw=((t*.55)%1.5)-.25;
- HOLO.P.forEach(p=>{const u=Math.min(1,Math.max(0,(t-p.d)/1.6)),e=1-Math.pow(1-u,3);let tx=cx+p.x*bw*.5*2*.5*1.0,ty=base-p.y*bh;tx=cx+p.x*bw*.5;
-  let vx=tx-cx,vy=ty-cy;const ang=(1-e)*2.6,ca=Math.cos(ang),sa=Math.sin(ang);let px=cx+(vx*ca-vy*sa)*e,py=cy+(vx*sa+vy*ca)*e;
-  if(t>HOLO.dur){const wv=Math.min(1,Math.max(0,(t-HOLO.dur-p.d*.5)/1.3));px=px+(cx-px)*wv;py=py+(cy-py)*wv}
-  const jit=Math.sin(t*18+p.z)*.7;const gy=Math.sin(t*2.3)>.985?Math.floor(p.y*20)%2?4:-4:0;
-  let al=(.75+.25*Math.sin(t*3+p.z))*life*gl*fl*Math.min(1,e*1.6),sz=p.s*(1+.0*e);if(Math.abs(p.y-sw)<.05){al=Math.min(1,al+.55);sz*=1.5}
-  g.fillStyle=p.g?`rgba(255,${Math.round(210-60*tr)},${Math.round(122-80*tr)},${Math.min(1,al)})`:`rgba(${CC},${Math.min(1,al)})`;g.fillRect(px+jit+gy,py,sz,sz)});
- g.fillStyle=`rgba(${CC},${.05*life*gl})`;for(let y=top;y<base;y+=4)g.fillRect(cx-bw*.5,y,bw,1);
- g.globalCompositeOperation="source-over";if(t>.8){const a=Math.min(1,(t-.8)/.8)*life;g.textAlign="center";g.fillStyle=`rgba(${CC},${.9*a})`;g.font="500 13px Orbitron,system-ui,sans-serif";const L=(HOLO.city||"").toUpperCase().split("").join(" ");g.fillText(L,cx,base+bw*.09+8);g.fillStyle=`rgba(255,${Math.round(210-60*tr)},${Math.round(122-80*tr)},${.8*a})`;g.font="500 11px Rajdhani,system-ui,sans-serif";g.fillText(HOLO.name.toUpperCase(),cx,base+bw*.09+26)}
+ const cone=g.createLinearGradient(0,base,0,base-S*1.05);cone.addColorStop(0,`rgba(${CC},${.13*life*gl})`);cone.addColorStop(1,`rgba(${CC},0)`);g.fillStyle=cone;g.beginPath();g.moveTo(cx-S*.55,base);g.lineTo(cx+S*.55,base);g.lineTo(cx+S*.8,base-S*1.05);g.lineTo(cx-S*.8,base-S*1.05);g.closePath();g.fill();
+ for(let r=0;r<3;r++){const q=(t*.45+r/3)%1,R=S*(.55+.35*q);g.strokeStyle=`rgba(${CC},${(.5-.45*q)*life*gl})`;g.lineWidth=1.2;g.beginPath();g.ellipse(cx,base,R,R*sp,0,0,6.283);g.stroke()}
+ g.strokeStyle=`rgba(${CC},${.35*life*gl})`;g.setLineDash([3,6]);g.beginPath();g.ellipse(cx,base,S*.82,S*.82*sp,0,0,6.283);g.stroke();g.setLineDash([]);
+ for(let i=0;i<12;i++){const a=th+i/12*6.2832,x=Math.cos(a)*.82,z=Math.sin(a)*.82;const sx=cx+x*S,sy=base+z*S*sp;g.fillStyle=`rgba(${CC},${.6*life*gl})`;g.fillRect(sx-1,sy-1,2.5,2.5)}
+ const sw=((t*.32)%1.3)-.1;
+ HOLO.P.forEach(p=>{const u=Math.min(1,Math.max(0,(t-p.d)/1.6)),e=1-Math.pow(1-u,3);
+  const xr=p.x*ct+p.z*st,zr=-p.x*st+p.z*ct,yy=p.y-.5,ys=yy*cp-zr*sp,dz=zr*cp+yy*sp,f=2.8/(2.8-dz),tx=cx+xr*f*S,ty=mid-ys*f*S;
+  const vx=tx-cx,vy=ty-cy,ang=(1-e)*2.6,ca=Math.cos(ang),sa=Math.sin(ang);let px=cx+(vx*ca-vy*sa)*e,py=cy+(vx*sa+vy*ca)*e;
+  if(t>HOLO.dur){const wv=Math.min(1,Math.max(0,(t-HOLO.dur-p.d*.5)/1.3));px+=(cx-px)*wv;py+=(cy-py)*wv}
+  const gy=Math.sin(t*2.3)>.985?(Math.floor(p.y*20)%2?4:-4):0,dep=Math.max(.35,Math.min(1,.62+dz*.7));
+  let al=(.8+.2*Math.sin(t*3+p.z0))*life*gl*fl*Math.min(1,e*1.6)*dep,sz=p.s*f*(.8+.3*dep);if(Math.abs(p.y-sw)<.025){al=Math.min(1,al+.6);sz*=1.5}
+  g.fillStyle=p.g?`rgba(${GC},${Math.min(1,al)})`:`rgba(${CC},${Math.min(1,al)})`;g.fillRect(px+gy,py,sz,sz)});
+ if(sw>0&&sw<1.05){const yy=sw-.5,sy=mid-yy*cp*S,R=S*.8;g.strokeStyle=`rgba(${CC},${.22*life*gl})`;g.beginPath();g.ellipse(cx,sy,R,R*sp,0,0,6.283);g.stroke()}
+ g.fillStyle=`rgba(${CC},${.04*life*gl})`;for(let y=base-S*1.05;y<base;y+=4)g.fillRect(cx-S*.8,y,S*1.6,1);
+ g.globalCompositeOperation="source-over";if(t>.8){const a=Math.min(1,(t-.8)/.8)*life,ly=base+S*.82*sp+18;g.textAlign="center";g.fillStyle=`rgba(${CC},${.9*a})`;g.font="500 13px Orbitron,system-ui,sans-serif";g.fillText((HOLO.city||"").toUpperCase().split("").join(" "),cx,ly);g.fillStyle=`rgba(${GC},${.8*a})`;g.font="500 11px Rajdhani,system-ui,sans-serif";g.fillText((HOLO.name||"").toUpperCase(),cx,ly+18)}
  requestAnimationFrame(holoFrame)}
 /* ===== attività sui puntini ===== */
 function dueMs(d){if(!d)return null;const t=new Date(d.length<=10?d+"T23:59":d).getTime();return isNaN(t)?null:t}
@@ -845,7 +1056,7 @@ function toggleRec(){
  try{rec.start();rb.textContent="■ Stop";st.textContent="In ascolto…"}catch(e){rec=null}}
 function saveTxt(){const p=cp(),m=p&&p.mt.find(x=>x.id===mid),t=$("#txt");if(m&&t&&m.testo!==t.value){m.testo=t.value;persist(p)}}
 
-document.addEventListener("change",e=>{R=R||{t:{}};const i=e.target.id;if(i==="vm"){MODE=e.target.value;try{localStorage.setItem("vm",MODE)}catch(x){}render();return}if(i==="mst"){MST=+e.target.value;try{localStorage.setItem("mst",String(MST))}catch(x){}return}if(i==="wx-c"||i==="wm-p-h"||i==="wxcity"){try{localStorage.setItem("wxc",e.target.value.trim())}catch(x){}wxLoad(true);return}if(i==="un"){UN=e.target.value.trim();try{localStorage.setItem("un",UN)}catch(x){}return}if(i==="nm"){NM=e.target.value.trim()||"Nova";try{localStorage.setItem("nm",NM)}catch(x){}render();return}if(i==="sty"){STY=e.target.value;try{localStorage.setItem("sty",STY)}catch(x){}return}if(i==="vv"){try{localStorage.setItem("vv",e.target.value)}catch(x){}say("Questa è la mia nuova voce.");return}if(i==="vr"){VRATE=parseFloat(e.target.value)||1;try{localStorage.setItem("vr",VRATE)}catch(x){}say("Velocità regolata.");return}if(i==="nx-v"||i==="nx-o"){nxField(e.target);return}if(i==="rd")R.day=e.target.value;if(i==="rs")R.start=e.target.value;if(i==="rh")R.h=e.target.value;if(e.target.dataset.rt)R.t[e.target.dataset.rt]=e.target.value;const f=e.target.dataset.f,p=cp();
+document.addEventListener("change",e=>{R=R||{t:{}};const i=e.target.id;if(i==="vm"){MODE=e.target.value;try{localStorage.setItem("vm",MODE)}catch(x){}render();return}if(i==="mst"){MST=+e.target.value;try{localStorage.setItem("mst",String(MST))}catch(x){}return}if(i==="wx-c"||i==="wm-p-h"||i==="wxcity"){try{localStorage.setItem("wxc",e.target.value.trim())}catch(x){}wxLoad(true);return}if(i==="un"){UN=e.target.value.trim();try{localStorage.setItem("un",UN)}catch(x){}return}if(i==="nm"){NM=e.target.value.trim()||"Nova";try{localStorage.setItem("nm",NM)}catch(x){}render();return}if(i==="sty"){STY=e.target.value;try{localStorage.setItem("sty",STY)}catch(x){}return}if(i==="vv"){try{localStorage.setItem("vv",e.target.value)}catch(x){}say("Questa è la mia nuova voce.");const hh=$("#vhint");if(hh)hh.textContent=voiceHint();return}if(i==="vg"){try{localStorage.setItem("vg",e.target.value);localStorage.removeItem("vv")}catch(x){}render();setTimeout(()=>say("Ciao, questa è la mia nuova voce."),200);return}if(i==="vr"){VRATE=parseFloat(e.target.value)||1;try{localStorage.setItem("vr",VRATE)}catch(x){}say("Velocità regolata.");return}if(i==="nx-v"||i==="nx-o"){nxField(e.target);return}if(i==="rd")R.day=e.target.value;if(i==="rs")R.start=e.target.value;if(i==="rh")R.h=e.target.value;if(e.target.dataset.rt)R.t[e.target.dataset.rt]=e.target.value;const f=e.target.dataset.f,p=cp();
  if(f&&p){p[f]=f==="fido"?(e.target.value===""?null:parseFloat(e.target.value.replace(",","."))):e.target.value;persist(p)}
  if(e.target.id==="txt")saveTxt();
  if(f==="stato"||f==="parent"){if(f==="stato")p.statoDal=p.stato?nowL().slice(0,10):"";persist(p);render()}
